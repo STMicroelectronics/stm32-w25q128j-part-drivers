@@ -1,15 +1,15 @@
 {
     "bomFormat": "CycloneDX",
     "specVersion": "1.5",
-    "serialNumber": "urn:uuid:a1fc2e9d-e9ba-4b83-8877-ba5cdda89ce9",
+    "serialNumber": "urn:uuid:794d92f0-31e5-4d24-9ae9-118c9fc8f873",
     "version": 1,
     "metadata": {
-        "timestamp": "2026-03-03T11:30:36Z",
+        "timestamp": "2026-05-06T15:27:17Z",
         "tools": [
             {
                 "vendor": "Black Duck",
                 "name": "Hub",
-                "version": "2025.10.0"
+                "version": "2026.1.1"
             },
             {
                 "vendor": "CycloneDX",
@@ -24,12 +24,12 @@
         ],
         "component": {
             "type": "application",
-            "bom-ref": "c812a949-3920-4911-8b7b-753caad1e287",
+            "bom-ref": "acf04cbd-7937-47fe-a9d8-6e43087ac83f",
             "supplier": {
-                "name": ""
+                "name": "Organization: w25q128j_Part_Drivers"
             },
             "name": "w25q128j_Part_Drivers",
-            "version": "2.0.0",
+            "version": "2.0.1",
             "licenses": [
                 {
                     "license": {
@@ -47,7 +47,7 @@
                 },
                 {
                     "name": "BlackDuck-ComponentVersion",
-                    "value": "c812a949-3920-4911-8b7b-753caad1e287"
+                    "value": "acf04cbd-7937-47fe-a9d8-6e43087ac83f"
                 }
             ]
         }
@@ -55,9 +55,9 @@
     "components": [
         {
             "type": "library",
-            "bom-ref": "e7195772-2666-4145-8c89-3e544ffed30d",
+            "bom-ref": "acf04cbd-7937-47fe-a9d8-6e43087ac83f---e7195772-2666-4145-8c89-3e544ffed30d",
             "supplier": {
-                "name": ""
+                "name": "Organization: w25q128j_Part_Drivers"
             },
             "author": "STMicroelectronics",
             "name": "w25q128j_Part_Drivers",
@@ -86,9 +86,9 @@
     ],
     "dependencies": [
         {
-            "ref": "c812a949-3920-4911-8b7b-753caad1e287",
+            "ref": "acf04cbd-7937-47fe-a9d8-6e43087ac83f",
             "dependsOn": [
-                "e7195772-2666-4145-8c89-3e544ffed30d"
+                "acf04cbd-7937-47fe-a9d8-6e43087ac83f---e7195772-2666-4145-8c89-3e544ffed30d"
             ]
         }
     ]

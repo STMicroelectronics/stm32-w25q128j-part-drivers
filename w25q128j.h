@@ -33,7 +33,18 @@ extern "C" {
 #endif /* USE_HAL_SPI_REGISTER_CALLBACKS */
 
 
-#define W25Q128J_SPI_POLL_TIMEOUT    1000U           /*!< Default SPI timeout (1s) */
+#if defined (__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+#define W25Q128J_ALIGNMENT_SIZE   __SCB_DCACHE_LINE_SIZE
+#else
+#define W25Q128J_ALIGNMENT_SIZE   4U
+#endif /* __DCACHE_PRESENT */
+
+
+#define W25Q128J_SPI_POLL_TIMEOUT    1000U          /*!< Default SPI timeout (1s) */
+
+#define W25Q128J_WRITE_PAGE_MAX_WAIT  5000U         /*!< write page timeout (5s) */
+
+#define W25Q128J_CS_MAX_CHECK_COUNT    20U        /*!< max wait count for CS GPIO switching */
 
 /* Chip select defining  */
 #define W25Q128J_CS_PIN_SET       HAL_GPIO_PIN_SET   /*!< Select the W25Q128J memory   */
@@ -145,8 +156,8 @@ extern "C" {
 #define W25Q128J_READ_ID_CMD_SIZE                     4U             /*!< Read ID command size                         */
 #define W25Q128J_ID_SIZE                              2U             /*!< ID size                                      */
 #define W25Q128J_READ_JDEC_ID_CMD_SIZE                1U             /*!< Read JDEC ID command size                    */
-#define W25Q128J_JDEC_ID_SIZE                         4U             /*!< JDEC ID size                                 */
-#define W25Q128J_UNIQUE_ID_CMD_SIZE                   1U             /*!< Unique ID command size                       */
+#define W25Q128J_JDEC_ID_SIZE                         3U             /*!< JDEC ID size                                 */
+#define W25Q128J_UNIQUE_ID_CMD_SIZE                   5U             /*!< Unique ID command size                       */
 #define W25Q128J_UNIQUE_ID_SIZE                       8U             /*!< Unique ID size                               */
 #define W25Q128J_RESET_ENABLE_CMD_SIZE                1U             /*!< Reset enable command size                    */
 #define W25Q128J_RESET_CMD_SIZE                       1U             /*!< Reset command size                           */
@@ -173,10 +184,12 @@ extern "C" {
 /* Status Register 1 */
 #define W25Q128J_SR1_BUSY                               0x01U               /*!< Erase/Write in progress */
 #define W25Q128J_SR1_WEL                                0x02U               /*!< Write enable latch */
-#define W25Q128J_SR1_BP                                 0x1CU               /*!< Block protected bits */
+#define W25Q128J_SR1_BP_BITS_MASK                       0x1CU               /*!< BP[2:0] block protection bits mask */
+#define W25Q128J_SR1_BP                                 W25Q128J_SR1_BP_BITS_MASK /*!< Backward-compatible alias for BP[2:0] mask */
 #define W25Q128J_SR1_TB                                 0x20U               /*!< Top/Bottom protect */
 #define W25Q128J_SR1_SEC                                0x40U               /*!< Sector protect */
-#define W25Q128J_SR1_PROTECT_ALL                        W25Q128J_SR1_BP     /*!< Enable protection */
+#define W25Q128J_SR1_PROTECTION_CFG_MASK                (W25Q128J_SR1_SEC | W25Q128J_SR1_BP_BITS_MASK) /*!< SEC and BP[2:0] mask */
+#define W25Q128J_SR1_PROTECT_ALL                        W25Q128J_SR1_BP_BITS_MASK /*!< Enable protection */
 #define W25Q128J_SR1_WRITE_PROTECTION_DISABLE           0x00U               /*!< Disable protection */
 
 
@@ -205,8 +218,18 @@ typedef enum
 } w25q128j_status_t;
 
 /**
+  * @brief Enumeration defining the memory wait condition.
+  *        It is only used with w25q128j_wait_for_state() function.
+  */
+typedef enum
+{
+  W25Q128J_STATE_WAIT_UNTIL_IDLE,     /*!< Wait for the device to become fully ready for read/write operations: BUSY = 0 and SUSPEND = 0 */
+  W25Q128J_STATE_WAIT_UNTIL_READABLE  /*!< Wait for the device to become readable: BUSY = 0; read access is allowed even if suspended.   */
+} w25q128j_wait_condition_t;
+
+/**
   * @brief Enumeration defining the W25Q128J init state.
-   */
+  */
 typedef enum
 {
   W25Q128J_INIT_NO = 0,                   /*!<  Instance is not initialized                */
@@ -223,6 +246,37 @@ typedef enum
   W25Q128J_ERASE_64K_BLOCK                /*!< 64K size Block erase                          */
 } w25q128j_erase_t;
 
+/**
+  * @brief Enumeration defining the status-register based block protection values.
+  * @note  These values map to the datasheet WPS=0 protection table and encode
+  *        the SEC bit together with BP[2:0]. The Top/Bottom selection is
+  *        configured independently through w25q128j_set_top_bottom_cfg().
+  */
+typedef enum
+{
+  W25Q128J_BP_NONE   = W25Q128J_SR1_WRITE_PROTECTION_DISABLE, /*!< No array protection           */
+  W25Q128J_BP_4KB    = (W25Q128J_SR1_SEC | 0x04U),            /*!< Protect 4KB sector region     */
+  W25Q128J_BP_8KB    = (W25Q128J_SR1_SEC | 0x08U),            /*!< Protect 8KB sector region     */
+  W25Q128J_BP_16KB   = (W25Q128J_SR1_SEC | 0x0CU),            /*!< Protect 16KB sector region    */
+  W25Q128J_BP_32KB   = (W25Q128J_SR1_SEC | 0x10U),            /*!< Protect 32KB sector region    */
+  W25Q128J_BP_256KB  = 0x04U,                                 /*!< Protect 256KB block region    */
+  W25Q128J_BP_512KB  = 0x08U,                                 /*!< Protect 512KB block region    */
+  W25Q128J_BP_1MB    = 0x0CU,                                 /*!< Protect 1MB block region      */
+  W25Q128J_BP_2MB    = 0x10U,                                 /*!< Protect 2MB block region      */
+  W25Q128J_BP_4MB    = 0x14U,                                 /*!< Protect 4MB block region      */
+  W25Q128J_BP_8MB    = 0x18U,                                 /*!< Protect 8MB block region      */
+  W25Q128J_BP_ALL    = 0x1CU                                  /*!< Protect the full array        */
+} w25q128j_bp_cfg_t;
+
+/**
+  * @brief Enumeration defining the protected array direction.
+  */
+typedef enum
+{
+  W25Q128J_BP_TB_TOP = 0,               /*!< TB = 0: protect upper area */
+  W25Q128J_BP_TB_BOTTOM                 /*!< TB = 1: protect lower area */
+} w25q128j_bp_tb_cfg_t;
+
 typedef struct w25q128j_obj_s w25q128j_obj_t;
 
 #if defined (W25Q128J_CALLBACKS) && (W25Q128J_CALLBACKS == 1)
@@ -236,17 +290,51 @@ typedef struct
 
 typedef enum
 {
-  W25Q128J_ASYNC_WRITE_IDLE = 0,      /*!< Idle state - No ongoing transfer                                 */
-  W25Q128J_ASYNC_WEL,                 /*!< Send the write enable cmd                                        */
-  W25Q128J_ASYNC_WRITE_CMD,           /*!< Send the write page cmd                                          */
-  W25Q128J_ASYNC_WRITE_DATA           /*!< Send data to write                                               */
+  W25Q128J_ASYNC_WRITE_IDLE = 0,      /*!< Idle state - No ongoing transfer                            */
+  W25Q128J_ASYNC_WEL,                 /*!< Send the write enable cmd                                   */
+  W25Q128J_ASYNC_WRITE_CMD,           /*!< Send the write page cmd                                     */
+  W25Q128J_ASYNC_WRITE_DATA,          /*!< Send data to write                                          */
+  W25Q128J_ASYNC_WAIT_READY,          /*!< Wait the BUSY flag to be reset                              */
+  W25Q128J_ASYNC_READY                /*!< Memory is in a ready state for the next transfer to start   */
 } w25q128j_async_write_phase_t;
 
 typedef enum
 {
   W25Q128J_ASYNC_READ_IDLE = 0,      /*!<  Idle state - No ongoing transfer */
+  W25Q128J_ASYNC_READ_CMD,           /*!<  Sending Read command            */
   W25Q128J_ASYNC_READING             /*!<  Read transfer ongoing            */
 } w25q128j_async_read_phase_t;
+
+typedef enum
+{
+  W25Q128J_ASYNC_EXEC_NONBLOCKING = 0,   /*!< Non-blocking async execution mode                               */
+  W25Q128J_ASYNC_EXEC_BLOCKING,          /*!< Blocking async execution mode                                   */
+  W25Q128J_ASYNC_EXEC_PAGE               /*!< Single page write - wait states handled by the user application */
+} w25q128j_async_exec_mode_t;
+
+typedef struct
+{
+  volatile uint32_t                  inhibit_callbacks;          /*!< Used for multi-pages writes                    */
+  w25q128j_async_read_phase_t        rd_phase;                   /*!< Async write phase                              */
+  w25q128j_async_write_phase_t       wr_phase;                   /*!< Async read phase                               */
+  uint8_t                            *p_buff;                    /*!< Pointer to the write buffer - async writes     */
+  uint32_t                           current_addr;               /*!< Current write page          - async writes     */
+  uint32_t                           size_byte;                  /*!< Total write data size       - async writes     */
+  uint32_t                           current_index;
+  uint32_t                           nb_transfer;                /*!< Number of pages to write    - async writes     */
+  uint16_t                           first_page_size;
+  uint16_t                           last_page_size;
+  uint8_t                            *pending_transfer_ptr;      /*!< Next transfer pointer for split IT/DMA flow    */
+  uint16_t                           pending_transfer_len;       /*!< Next transfer length for split IT/DMA flow     */
+  uint8_t                            *pending_transfer_tail_ptr; /*!< Tail transfer pointer for split IT/DMA/IT flow */
+  uint16_t                           pending_transfer_tail_len;  /*!< Tail transfer length for split IT/DMA/IT flow  */
+#if defined (__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+  uint8_t                            *pending_rx_body_ptr;       /*!< RX body pointer for cache invalidate           */
+  uint16_t                           pending_rx_body_len;        /*!< RX body length for cache invalidate            */
+#endif /* __DCACHE_PRESENT */
+  uint8_t                            cmd_buf[4U];                /*!< Buffer for cmds with async transfers           */
+  w25q128j_async_exec_mode_t         async_exec_mode;            /*!< Async execution mode                           */
+} w25q128j_async_transfer_context_t;
 #endif /* W25Q128J_CALLBACKS */
 
 /**
@@ -273,22 +361,15 @@ typedef struct
   uint32_t              id;             /*!< Instance ID                                    */
 
 } w25q128j_io_t;
+
 struct w25q128j_obj_s
 {
   w25q128j_init_state_t       is_initialized;    /*!< Init state                                 */
   w25q128j_io_t               pio;               /*!< IO interface                               */
 #if defined (W25Q128J_CALLBACKS) && (W25Q128J_CALLBACKS == 1)
-  volatile uint32_t inhibit_callbacks;               /*!< Used for multi-pages writes           */
-  w25q128j_callback_ctx_t     rd_cb_ctx;             /*!< Read  Complete: Callback data         */
-  w25q128j_callback_ctx_t     wr_cb_ctx;             /*!< Write Complete: Callback data         */
-  w25q128j_async_read_phase_t  rd_phase;             /*!< Async write phase                     */
-  w25q128j_async_write_phase_t wr_phase;             /*!< Async read phase                      */
-  uint32_t                     current_address;      /*!< Current write address       - async writes */
-  const uint8_t               *p_buff;               /*!< Pointer to the write buffer - async writes */
-  uint32_t                    current_index;
-  uint16_t                    first_page_size;       /*!< First page size */
-  uint16_t                    last_page_size;        /*!< Last page size */
-  uint8_t                     is_first_page;         /*!< Used to check if it is the first page to write */
+  w25q128j_callback_ctx_t           rd_cb_ctx;             /*!< Read  Complete: Callback data         */
+  w25q128j_callback_ctx_t           wr_cb_ctx;             /*!< Write Complete: Callback data         */
+  w25q128j_async_transfer_context_t async_context;
 #endif /* W25Q128J_CALLBACKS */
 };
 
@@ -299,8 +380,6 @@ w25q128j_status_t w25q128j_init(w25q128j_obj_t *pobj, uint32_t dev_id);
 w25q128j_status_t w25q128j_deinit(w25q128j_obj_t *pobj);
 
 w25q128j_status_t w25q128j_reset(w25q128j_obj_t *pobj);
-w25q128j_status_t w25q128j_suspend(w25q128j_obj_t *pobj);
-w25q128j_status_t w25q128j_resume(w25q128j_obj_t *pobj);
 
 /* Memory information ------------------*/
 w25q128j_status_t w25q128j_get_info(const w25q128j_obj_t *pobj, w25q128j_info_t *p_info);
@@ -313,6 +392,11 @@ w25q128j_status_t w25q128j_read_unique_id(w25q128j_obj_t *pobj, uint8_t *p_id);
 w25q128j_status_t w25q128j_read_status_reg1(w25q128j_obj_t *pobj, uint8_t *p_value);
 w25q128j_status_t w25q128j_read_status_reg2(w25q128j_obj_t *pobj, uint8_t *p_value);
 w25q128j_status_t w25q128j_read_status_reg3(w25q128j_obj_t *pobj, uint8_t *p_value);
+
+w25q128j_status_t w25q128j_set_block_protection(w25q128j_obj_t *pobj, w25q128j_bp_cfg_t bp_cfg);
+w25q128j_status_t w25q128j_get_block_protection(w25q128j_obj_t *pobj, w25q128j_bp_cfg_t *p_bp_cfg);
+w25q128j_status_t w25q128j_set_top_bottom_cfg(w25q128j_obj_t *pobj, w25q128j_bp_tb_cfg_t tb_cfg);
+w25q128j_status_t w25q128j_get_top_bottom_cfg(w25q128j_obj_t *pobj, w25q128j_bp_tb_cfg_t *p_tb_cfg);
 
 w25q128j_status_t w25q128j_write_status_reg1(w25q128j_obj_t *pobj, uint8_t value);
 w25q128j_status_t w25q128j_write_status_reg2(w25q128j_obj_t *pobj, uint8_t value);
@@ -340,15 +424,25 @@ w25q128j_status_t w25q128j_chip_erase(w25q128j_obj_t *pobj);
 w25q128j_status_t w25q128j_enter_power_down(w25q128j_obj_t *pobj);
 w25q128j_status_t w25q128j_exit_power_down(w25q128j_obj_t *pobj);
 
+/* Wait state management functions --------------*/
+w25q128j_status_t w25q128j_wait_for_state(w25q128j_obj_t *pobj, w25q128j_wait_condition_t wait_condition);
+
+
 /* Async Read/Write page Commands (DMA)------------*/
 #if defined (USE_HAL_SPI_DMA) && (USE_HAL_SPI_DMA == 1)
+#if defined (W25Q128J_CALLBACKS) && (W25Q128J_CALLBACKS == 1)
 /* Async Read/Write functions */
+w25q128j_status_t w25q128j_suspend(w25q128j_obj_t *pobj);
+w25q128j_status_t w25q128j_resume(w25q128j_obj_t *pobj);
 w25q128j_status_t w25q128j_read_dma(w25q128j_obj_t *pobj, uint8_t *p_data,
                                     uint32_t read_addr, uint32_t size_byte);
-#endif /* USE_HAL_SPI_DMA */
-#if defined (W25Q128J_CALLBACKS) && (W25Q128J_CALLBACKS == 1)
-w25q128j_status_t w25q128j_write_dma(w25q128j_obj_t *pobj, const uint8_t *p_data,
+w25q128j_status_t w25q128j_write_dma(w25q128j_obj_t *pobj, uint8_t *p_data,
                                      uint32_t write_addr, uint32_t size_byte);
+w25q128j_status_t w25q128j_write_page_dma(w25q128j_obj_t *pobj, uint8_t *p_data, uint32_t write_addr,
+                                          uint32_t size_byte);
+w25q128j_status_t w25q128j_exec_data_handler(w25q128j_obj_t *pobj);
+w25q128j_status_t w25q128j_write_dma_async(w25q128j_obj_t *pobj, uint8_t *p_data, uint32_t write_addr,
+                                           uint32_t size_byte);
 /* Callback register functions */
 w25q128j_status_t w25q128j_register_read_cplt_callback(w25q128j_obj_t *pobj, w25q128j_callback_t cb,
                                                        void *arg);
@@ -358,6 +452,7 @@ w25q128j_status_t w25q128j_register_write_cplt_callback(w25q128j_obj_t *pobj, w2
 w25q128j_async_write_phase_t w25q128j_get_async_write_phase(w25q128j_obj_t *pobj);
 w25q128j_async_read_phase_t w25q128j_get_async_read_phase(w25q128j_obj_t *pobj);
 #endif /* W25Q128J_CALLBACKS */
+#endif /* USE_HAL_SPI_DMA */
 
 
 #ifdef __cplusplus

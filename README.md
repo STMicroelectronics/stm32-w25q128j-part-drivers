@@ -1,6 +1,6 @@
 # __w25q128j Part Drivers__
 
-![tag](https://img.shields.io/badge/tag-2.0.0-brightgreen.svg)
+![tag](https://img.shields.io/badge/tag-2.1.0-brightgreen.svg)
 [![release note](https://img.shields.io/badge/release_note-view_html-gold.svg)](https://htmlpreview.github.io/?https://github.com/STMicroelectronics/stm32-w25q128j-part-drivers/blob/main/Release_Notes.html)
 
 ## Overview
@@ -112,4 +112,3 @@ typedef enum
   W25Q128J_ASYNC_WRITE_DATA           /*!< Send data to write                                               */
 } w25q128j_async_write_phase_t;
 ```
-

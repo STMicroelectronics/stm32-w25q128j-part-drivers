@@ -1,0 +1,95 @@
+{{!--
+  ******************************************************************************
+  * file           : mx_w25q128j_template.h.hbs
+  * brief          : Code generation for the W25Q128J part driver.
+  ******************************************************************************
+  * attention
+  *
+  * Copyright (c) 2026 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+~--}}
+/**
+  ******************************************************************************
+  * file           : mx_w25q128j.h
+  * brief          : Code generation for the W25Q128J part driver.
+  ******************************************************************************
+  * attention
+  *
+  * Copyright (c) {{#unless (eq 2026 (toInt (year)))}}2026-{{/unless}}{{year}} STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the mx_w25q128j_license.md file
+  * in the same directory as the generated code.
+  * If no mx_w25q128j_license.md file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+
+{{assign 'w25q128j_instances' (@root.SWConfigurationAPI.getInstances  "STMicroelectronics::Board Part:STM32CubeMX2 Config:W25Q128J")~}}
+
+/* Define to prevent recursive inclusion -------------------------------------*/
+#ifndef MX_W25Q128J_H
+#define MX_W25Q128J_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Includes ------------------------------------------------------------------*/
+#include "w25q128j.h"
+#include "mx_hal_def.h"
+
+/* Exported macro ------------------------------------------------------------*/
+{{#each @root.w25q128j_instances}}
+{{assign 'ctx' (@root.SWConfigurationAPI.getSwInstanceConfiguration this)~}}
+{{#with @root.ctx}}
+/* Part Config ID */
+#define W25Q128J_{{@index}}                              {{@index}}
+
+{{#if (length info.labels)}}
+/* User-defined aliases for the part drivers instances IDs and getter functions */
+{{else}}
+/* No label has been defined for this part driver instance,
+ * so no alias is generated for W25Q128J_{{@index}} or mx_w25q128j_{{@index}}_getobject(). */
+{{/if}}
+{{#each info.labels}}
+#define {{this}}                          W25Q128J_{{@../index}}
+{{/each}}
+{{#each info.labels}}
+#define {{lowercase this}}_getobject()    mx_w25q128j_{{@../index}}_getobject()
+{{/each}}
+
+{{#if (eq info.interface 'SPI')~}}
+{{!---------------------- SPI IO Properties ---------------------------------------------------}}
+{{assign 'gpioSelectionPin' resourcesAllocation.spiCfg.cs_pin.selection~}}
+{{assign 'gpioPinData' (@root.pinoutAPI.getPinData @root.gpioSelectionPin)~}}
+/* Resource bindings */
+#define W25Q128J_{{@index}}_SPI_GETHANDLE    mx_{{lowercase resourcesAllocation.spiCfg.spi_instance.selection}}_gethandle
+
+#define W25Q128J_{{@index}}_CS_PIN           HAL_GPIO_PIN_{{@root.gpioPinData.index}}
+
+#define W25Q128J_{{@index}}_CS_PORT          HAL_GPIO{{@root.gpioPinData.port}}
+{{/if}}
+{{/with}} {{!-- @root.ctx --}}
+{{/each}} {{!-- @root.w25q128j_instances --}}
+
+{{!---------------------- Part Getters FUNC --------------------------------------------------}}
+/* Functions to retrieve the part object */
+{{#each @root.w25q128j_instances}}
+{{assign 'ctx' (@root.SWConfigurationAPI.getSwInstanceConfiguration this)~}}
+{{#with @root.ctx}}
+w25q128j_obj_t *mx_w25q128j_{{@index}}_getobject(void);
+{{/with}} {{!-- @root.ctx --}}
+{{/each}} {{!-- @root.w25q128j_instances --}}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* MX_W25Q128J_H */
