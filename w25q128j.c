@@ -32,7 +32,7 @@ static w25q128j_status_t w25q128j_check_status_reg_protection(w25q128j_obj_t *po
 static void w25q128j_async_wait_ready(w25q128j_obj_t *pobj);
 /* Async write cmd functions */
 static w25q128j_status_t w25q128j_write_it_cmd(w25q128j_obj_t *pobj, uint8_t *pdata, uint16_t len_byte);
-static w25q128j_status_t w25q128j_write_dma_cmd(w25q128j_obj_t *pobj, const uint8_t *pdata, uint16_t len_byte);
+static w25q128j_status_t w25q128j_write_dma_cmd(w25q128j_obj_t *pobj, uint8_t *pdata, uint16_t len_byte);
 static w25q128j_status_t w25q128j_write_enable_async(w25q128j_obj_t *pobj);
 /* Async write internal callbacks */
 static void spi_we_cplt_cb(hal_spi_handle_t *phspi);
@@ -2009,14 +2009,14 @@ static void spi_rx_body_cplt_cb(hal_spi_handle_t *phspi)
   * @param  len_byte   : Size of data to read in bytes.
   * @retval error status.
   */
-static w25q128j_status_t w25q128j_write_dma_cmd(w25q128j_obj_t *pobj, const uint8_t *pdata, uint16_t len_byte)
+static w25q128j_status_t w25q128j_write_dma_cmd(w25q128j_obj_t *pobj, uint8_t *pdata, uint16_t len_byte)
 {
   if (w25q128j_select(pobj) != W25Q128J_OK)
   {
     return W25Q128J_ERROR;
   }
 #if defined (__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
-  SCB_CleanDCache_by_Addr((uint32_t *)pdata, (int32_t)len_byte);
+  SCB_CleanDCache_by_Addr(pdata, (int32_t)len_byte);
 #endif /* __DCACHE_PRESENT */
   if (HAL_SPI_Transmit_DMA(pobj->pio.phspi, pdata, (uint32_t)len_byte) != HAL_OK)
   {
@@ -2466,36 +2466,43 @@ w25q128j_status_t w25q128j_exec_data_handler(w25q128j_obj_t *pobj)
   {
     case W25Q128J_ASYNC_WAIT_READY:
     {
-      uint32_t tstart = HAL_GetTick();
+      uint32_t tstart =  pobj->async_context.tstart;
       w25q128j_status_t mem_state = W25Q128J_ERROR;
-      do
+
+      if (w25q128j_get_status(pobj, &mem_state) != W25Q128J_OK)
       {
-        if (w25q128j_get_status(pobj, &mem_state) != W25Q128J_OK)
-        {
-          return W25Q128J_ERROR;
-        }
-      } while (((HAL_GetTick() - tstart) < W25Q128J_WRITE_PAGE_MAX_WAIT)
-               && (mem_state != W25Q128J_OK));
+        return W25Q128J_ERROR;
+      }
 
       if (mem_state == W25Q128J_OK)
       {
         /* Memory is ready - update the wr_phase */
         pobj->async_context.wr_phase = W25Q128J_ASYNC_READY;
+        /* Start next page transfer/clean-up */
         w25q128j_write_nextpage(pobj);
-        return W25Q128J_OK;
+        return W25Q128J_BUSY;
+      }
+      if ((HAL_GetTick() - tstart) > W25Q128J_WRITE_PAGE_MAX_WAIT)
+      {
+        /* Timeout error */
+        return W25Q128J_ERROR;
       }
       else
       {
-        /* timeout */
-        return W25Q128J_ERROR;
+        /* Memory is not ready yet */
+        return W25Q128J_BUSY;
       }
       break;
     }
+    case W25Q128J_ASYNC_WRITE_IDLE:
+      /* TX transfer finished */
+      return W25Q128J_OK;
+      break;
     default: /* all other states: no operation to do */
       break;
   }
 
-  return W25Q128J_OK;
+  return W25Q128J_BUSY;
 }
 
 /**
@@ -2560,6 +2567,7 @@ static void w25q128j_async_wait_ready(w25q128j_obj_t *pobj)
   }
   else
   {
+    pobj->async_context.tstart = HAL_GetTick();
     pobj->async_context.wr_phase = W25Q128J_ASYNC_WAIT_READY;
   }
 }
